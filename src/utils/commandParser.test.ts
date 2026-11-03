@@ -45,3 +45,14 @@ test('detects maps and search queries correctly', () => {
   const searchCmd = parseUserCommand('What is the latest news on quantum computing breakthroughs?');
   assert.equal(searchCmd.type, 'search_query');
 });
+
+test('handles wake-word prefixed voice commands correctly', () => {
+  const cmd1 = parseUserCommand('ARONE, turn off the lights in the living room');
+  assert.equal(cmd1.type, 'smart_home');
+  assert.equal(cmd1.parameters.action, 'toggle_off');
+
+  const cmd2 = parseUserCommand('Hey ARONE add task prepare quarterly audit');
+  assert.equal(cmd2.type, 'task_create');
+  assert.equal(cmd2.parameters.title, 'prepare quarterly audit');
+});
+

@@ -20,7 +20,13 @@ export interface ParsedCommand {
 }
 
 export function parseUserCommand(input: string): ParsedCommand {
-  const text = input.trim();
+  const original = input.trim();
+  // Strip leading greetings and common wake words if present (e.g. "ARONE, turn on lights" -> "turn on lights")
+  let cleanInput = original.replace(/^(?:hey|ok|okay|hello|hi)\s+/i, '');
+  cleanInput = cleanInput.replace(/^(?:arone|jarvis|friday|computer|edith)\b[,.!?:]*\s*/i, '');
+  cleanInput = cleanInput.trim() || original;
+
+  const text = cleanInput;
   const lower = text.toLowerCase();
 
   // 1. Smart home patterns: "turn on lights", "dim living room to 40%", "set thermostat to 72", "lock front door", "arm security"

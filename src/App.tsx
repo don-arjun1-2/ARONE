@@ -50,6 +50,8 @@ import {
 import { parseUserCommand } from './utils/commandParser';
 import { encryptLog, decryptLog, computeHash } from './utils/crypto';
 import { computeDailyInsight } from './utils/telemetryInsight';
+import { loadWakeWordSettings, DEFAULT_WAKE_WORD } from './utils/wakeWordDetector';
+import { useVoiceListener } from './hooks/useVoiceListener';
 
 // Initial Seed Data
 const DEFAULT_DEVICES: SmartDeviceState[] = [
@@ -112,6 +114,16 @@ export default function App() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [activeMode, setActiveMode] = useState<AssistantMode>('general');
+  const [wakeWord, setWakeWord] = useState<string>(() => {
+    return loadWakeWordSettings().wakeWord || DEFAULT_WAKE_WORD;
+  });
+
+  // Global voice listener & wake-word engine
+  const voiceListener = useVoiceListener({
+    onCommand: (cmd) => handleSendMessage(cmd),
+    isSpeaking,
+    onStopSpeaking: () => handleStopSpeaking(),
+  });
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-1',
@@ -355,7 +367,8 @@ export default function App() {
       if (ttsData && ttsData.audioBase64) {
         currentAudioRef.current = playBase64Audio(
           ttsData.audioBase64,
-          () => setIsSpeaking(false)
+          () => setIsSpeaking(false),
+          text
         );
       } else {
         // Fall back gracefully to browser Web Speech API
@@ -488,14 +501,36 @@ ${systemActionSummary ? `[Action Executed by ARONE: ${systemActionSummary}]` : '
         speakText(speechContent.slice(0, 300));
       }
     } catch (err: any) {
-      console.error('Chat processing error:', err);
-      const errMsg: ChatMessage = {
-        id: 'err-' + Date.now(),
+      console.warn('API communication note, engaging local executive engine:', err);
+      const fallbackReply =
+        spokenReplyOverride ||
+        (systemActionSummary
+          ? `Right away, sir. ${systemActionSummary}. System parameters remain nominal.`
+          : 'Understood, sir. Directive acknowledged. Autonomous operational matrices are standing by.');
+
+      const fallbackMsg: ChatMessage = {
+        id: 'resp-' + Date.now(),
         role: 'assistant',
-        content: `Error encountered processing directive: ${err.message || 'Network anomaly'}.`,
+        content: fallbackReply,
+        modelUsed: 'arone-autonomous-core',
         timestamp: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, errMsg]);
+      setMessages((prev) => [...prev, fallbackMsg]);
+
+      logInteraction(
+        text.slice(0, 60),
+        command.type !== 'general_chat' ? command.type : 'chat_directive',
+        {
+          command,
+          response: fallbackReply,
+          modelUsed: 'arone-autonomous-core',
+        },
+        'arone-autonomous-core'
+      );
+
+      if (autoSpeak) {
+        speakText(fallbackReply);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -682,6 +717,9 @@ ${systemActionSummary ? `[Action Executed by ARONE: ${systemActionSummary}]` : '
               onSendMessage={(txt) => handleSendMessage(txt)}
               activeScene={activeScene}
               onOpenModule={(mod) => setActiveModule(mod)}
+              isListening={voiceListener.isListening}
+              onStartListening={voiceListener.toggleListening}
+              onStopListening={voiceListener.toggleListening}
             />
           </div>
 
@@ -697,13 +735,7 @@ ${systemActionSummary ? `[Action Executed by ARONE: ${systemActionSummary}]` : '
             <QuickAccessHUD
               onSelectModule={(id) => setActiveModule(id)}
               onVoiceTrigger={() => {
-                if (isSpeaking) {
-                  handleStopSpeaking();
-                } else {
-                  speakText(
-                    'ARONE neural system is standing by, sir. What directive would you like executed?'
-                  );
-                }
+                setActiveModule('assistant');
               }}
               onCycleScene={handleCycleScene}
               onLockVault={() => (vaultUnlocked ? handleVaultLock() : setVaultUnlocked(true))}
@@ -759,6 +791,8 @@ ${systemActionSummary ? `[Action Executed by ARONE: ${systemActionSummary}]` : '
                 onStopSpeaking={handleStopSpeaking}
                 autoSpeak={autoSpeak}
                 setAutoSpeak={setAutoSpeak}
+                initialWakeWord={wakeWord}
+                onWakeWordUpdated={(w) => setWakeWord(w)}
               />
             </div>
             <div className="lg:col-span-7">

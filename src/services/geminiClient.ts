@@ -106,7 +106,11 @@ export async function analyzeImageWithGemini(
 // Audio player helper
 let currentAudio: HTMLAudioElement | null = null;
 
-export function playBase64Audio(base64Audio: string, onEnded?: () => void): HTMLAudioElement {
+export function playBase64Audio(
+  base64Audio: string,
+  onEnded?: () => void,
+  fallbackText?: string
+): HTMLAudioElement {
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
@@ -115,32 +119,55 @@ export function playBase64Audio(base64Audio: string, onEnded?: () => void): HTML
   const audio = new Audio(`data:audio/wav;base64,${base64Audio}`);
   currentAudio = audio;
 
-  if (onEnded) {
-    audio.onended = () => {
-      onEnded();
-    };
-  }
+  let endedCalled = false;
+  const safeEnded = () => {
+    if (!endedCalled) {
+      endedCalled = true;
+      if (onEnded) onEnded();
+    }
+  };
+
+  audio.onended = safeEnded;
+  audio.onerror = () => {
+    console.warn('Audio playback error encountered');
+    if (fallbackText) {
+      speakWithBrowserSpeech(fallbackText, safeEnded);
+    } else {
+      safeEnded();
+    }
+  };
 
   audio.play().catch((err) => {
-    console.warn('Audio autoplay prevented or error:', err);
-    if (onEnded) onEnded();
+    console.warn('Audio autoplay blocked or failed, using speech synthesis:', err);
+    if (fallbackText) {
+      speakWithBrowserSpeech(fallbackText, safeEnded);
+    } else {
+      safeEnded();
+    }
   });
 
   return audio;
 }
 
-// Browser Web Speech API fallback for seamless vocalization when Gemini TTS quota is constrained
+// Browser Web Speech API fallback for seamless vocalization
 export function speakWithBrowserSpeech(text: string, onEnded?: () => void): void {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
     if (onEnded) onEnded();
     return;
   }
 
-  window.speechSynthesis.cancel();
+  // Chromium bug workaround: ensure synthesis is unpaused
+  try {
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    window.speechSynthesis.cancel();
+  } catch {}
 
-  // Strip markdown, asterisks, brackets for natural speech
+  // Strip markdown, asterisks, brackets, and emojis for clear vocal delivery
   const cleanSpeech = text
     .replace(/[*_#`[\]()]/g, '')
+    .replace(/[^\w\s.,!?'"-]/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -149,30 +176,68 @@ export function speakWithBrowserSpeech(text: string, onEnded?: () => void): void
     return;
   }
 
-  const utterance = new SpeechSynthesisUtterance(cleanSpeech.slice(0, 400));
-  utterance.rate = 1.05;
-  utterance.pitch = 0.95;
+  // Small delay after cancel() ensures Chromium queues the new utterance properly
+  setTimeout(() => {
+    try {
+      const utterance = new SpeechSynthesisUtterance(cleanSpeech.slice(0, 500));
+      utterance.rate = 1.02;
+      utterance.pitch = 0.95;
+      utterance.volume = 1.0;
 
-  const voices = window.speechSynthesis.getVoices();
-  // Try to find a refined British English voice like Jarvis, or standard English
-  const jarvisVoice =
-    voices.find((v) => v.lang.startsWith('en-GB') || v.name.toLowerCase().includes('daniel') || v.name.toLowerCase().includes('george')) ||
-    voices.find((v) => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Male'))) ||
-    voices.find((v) => v.lang.startsWith('en'));
+      let voices = window.speechSynthesis.getVoices();
+      const pickVoice = () => {
+        return (
+          voices.find(
+            (v) =>
+              v.lang.startsWith('en-GB') ||
+              v.name.toLowerCase().includes('daniel') ||
+              v.name.toLowerCase().includes('george')
+          ) ||
+          voices.find(
+            (v) =>
+              v.lang.startsWith('en') &&
+              (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Male'))
+          ) ||
+          voices.find((v) => v.lang.startsWith('en')) ||
+          voices[0]
+        );
+      };
 
-  if (jarvisVoice) {
-    utterance.voice = jarvisVoice;
-  }
+      const selectedVoice = pickVoice();
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
 
-  utterance.onend = () => {
-    if (onEnded) onEnded();
-  };
+      let ended = false;
+      const finish = () => {
+        if (!ended) {
+          ended = true;
+          if (onEnded) onEnded();
+        }
+      };
 
-  utterance.onerror = () => {
-    if (onEnded) onEnded();
-  };
+      utterance.onend = finish;
+      utterance.onerror = (e) => {
+        console.warn('SpeechSynthesis error:', e);
+        finish();
+      };
 
-  window.speechSynthesis.speak(utterance);
+      // Periodic resume heartbeat for Chromium long utterances
+      const resumeInterval = setInterval(() => {
+        if (!window.speechSynthesis.speaking) {
+          clearInterval(resumeInterval);
+        } else if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      }, 5000);
+
+      window.speechSynthesis.speak(utterance);
+      window.speechSynthesis.resume();
+    } catch (err) {
+      console.warn('speakWithBrowserSpeech failure:', err);
+      if (onEnded) onEnded();
+    }
+  }, 40);
 }
 
 export function stopAudioPlayback(): void {
@@ -181,6 +246,8 @@ export function stopAudioPlayback(): void {
     currentAudio = null;
   }
   if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {}
   }
 }

@@ -1,0 +1,113 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and system preferences for ARONE",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 255 },
+        "voicePersona": { "type": "string", "maxLength": 50 },
+        "speechSpeed": { "type": "string", "maxLength": 20 },
+        "autoSpeakResponses": { "type": "boolean" },
+        "homeMode": { "type": "string", "maxLength": 30 },
+        "encryptionInitialized": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "InteractionLog": {
+      "title": "InteractionLog",
+      "description": "Encrypted record of a user voice/chat interaction and ARONE response",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "actionType": { "type": "string", "maxLength": 50 },
+        "summary": { "type": "string", "maxLength": 200 },
+        "ciphertext": { "type": "string", "maxLength": 20000 },
+        "iv": { "type": "string", "maxLength": 64 },
+        "salt": { "type": "string", "maxLength": 64 },
+        "hashSignature": { "type": "string", "maxLength": 128 },
+        "modelUsed": { "type": "string", "maxLength": 50 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "actionType", "ciphertext", "iv"]
+    },
+    "SmartDevice": {
+      "title": "SmartDevice",
+      "description": "Smart home device controlled by ARONE",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "maxLength": 50 },
+        "room": { "type": "string", "maxLength": 50 },
+        "isOn": { "type": "boolean" },
+        "stateValue": { "type": "string", "maxLength": 50 },
+        "battery": { "type": "string", "maxLength": 10 },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["id", "userId", "name", "type", "room", "isOn"]
+    },
+    "ExecutiveMeeting": {
+      "title": "ExecutiveMeeting",
+      "description": "Scheduled meeting orchestrated by ARONE",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "attendees": { "type": "string", "maxLength": 500 },
+        "scheduledTime": { "type": "string", "maxLength": 50 },
+        "duration": { "type": "string", "maxLength": 50 },
+        "location": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "maxLength": 30 },
+        "agenda": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "scheduledTime", "status"]
+    },
+    "EmailRecord": {
+      "title": "EmailRecord",
+      "description": "Email drafted or dispatched by ARONE",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "recipient": { "type": "string", "maxLength": 200 },
+        "subject": { "type": "string", "maxLength": 300 },
+        "body": { "type": "string", "maxLength": 10000 },
+        "status": { "type": "string", "maxLength": 30 },
+        "priority": { "type": "string", "maxLength": 20 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "recipient", "subject", "body", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile and ARONE assistant preferences"
+    },
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": "InteractionLog",
+      "description": "Encrypted daily interaction and voice command logs"
+    },
+    "/users/{userId}/smartDevices/{deviceId}": {
+      "schema": "SmartDevice",
+      "description": "Smart home devices for the user"
+    },
+    "/users/{userId}/meetings/{meetingId}": {
+      "schema": "ExecutiveMeeting",
+      "description": "Scheduled meetings"
+    },
+    "/users/{userId}/emails/{emailId}": {
+      "schema": "EmailRecord",
+      "description": "Managed emails and drafts"
+    }
+  }
+}

@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profile Validation
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() <= 128 && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() <= 100
+        && data.email is string && data.email.size() <= 255;
+    }
+
+    // Interaction Log Validation (Encrypted Logs)
+    function isValidInteractionLog(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.actionType is string && data.actionType.size() <= 50
+        && data.ciphertext is string && data.ciphertext.size() <= 20000
+        && data.iv is string && data.iv.size() <= 64;
+    }
+
+    // Smart Device Validation
+    function isValidSmartDevice(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.type is string && data.type.size() <= 50
+        && data.room is string && data.room.size() <= 50
+        && data.isOn is bool;
+    }
+
+    // Meeting Validation
+    function isValidExecutiveMeeting(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.scheduledTime is string && data.scheduledTime.size() <= 50
+        && data.status is string && data.status.size() <= 30;
+    }
+
+    // Email Record Validation
+    function isValidEmailRecord(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.recipient is string && data.recipient.size() <= 200
+        && data.subject is string && data.subject.size() <= 300
+        && data.body is string && data.body.size() <= 10000
+        && data.status is string && data.status.size() <= 30;
+    }
+
+    // Match /users/{userId}
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Subcollection: Encrypted Interaction Logs
+      match /interactions/{interactionId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(interactionId) && isValidInteractionLog(incoming());
+        allow update: if isOwner(userId) && isValidId(interactionId) && isValidInteractionLog(incoming());
+        allow delete: if isOwner(userId) && isValidId(interactionId);
+      }
+
+      // Subcollection: Smart Home Devices
+      match /smartDevices/{deviceId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(deviceId) && isValidSmartDevice(incoming());
+        allow update: if isOwner(userId) && isValidId(deviceId) && isValidSmartDevice(incoming());
+        allow delete: if isOwner(userId) && isValidId(deviceId);
+      }
+
+      // Subcollection: Executive Meetings
+      match /meetings/{meetingId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(meetingId) && isValidExecutiveMeeting(incoming());
+        allow update: if isOwner(userId) && isValidId(meetingId) && isValidExecutiveMeeting(incoming());
+        allow delete: if isOwner(userId) && isValidId(meetingId);
+      }
+
+      // Subcollection: Email Records
+      match /emails/{emailId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(emailId) && isValidEmailRecord(incoming());
+        allow update: if isOwner(userId) && isValidId(emailId) && isValidEmailRecord(incoming());
+        allow delete: if isOwner(userId) && isValidId(emailId);
+      }
+    }
+  }
+}

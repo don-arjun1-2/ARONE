@@ -1,0 +1,8 @@
+{
+  "name": "ARONE - Autonomous Real-time Operations Network Engine",
+  "description": "ARONE is an intelligent voice-interactive executive assistant like Jarvis that answers questions, manages tasks with Google Tasks, schedules meetings, controls smart home systems, and maintains an encrypted log of all daily interactions.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
